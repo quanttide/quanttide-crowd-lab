@@ -1,0 +1,80 @@
+{
+  "typeKey": "lead_acquisition",
+  "version": "1.0.0",
+  "taskFieldSchema": {
+    "type": "object",
+    "required": ["title", "targetPersona", "coverage", "windowHours"],
+    "properties": {
+      "title": { "type": "string", "description": "发布时的任务名" },
+      "targetPersona": { "type": "object", "description": "目标画像：industry/scale/region 白名单" },
+      "coverage": { "type": "string", "description": "地域覆盖范围" },
+      "windowHours": { "type": "integer", "description": "线索采集时效窗口(小时)" }
+    }
+  },
+  "evidenceSchema": {
+    "type": "object",
+    "required": ["contactName", "contactPhone", "contactEmail", "companyName", "companyUnifiedCode", "industry", "scale", "region", "intentLevel", "source", "capturedAt"],
+    "properties": {
+      "contactName":        { "type": "string" },
+      "contactPhone":       { "type": "string" },
+      "contactEmail":       { "type": "string", "format": "email" },
+      "companyName":        { "type": "string" },
+      "companyUnifiedCode": { "type": "string" },
+      "industry":           { "type": "string" },
+      "scale":              { "type": "string" },
+      "region":             { "type": "string" },
+      "intentLevel":        { "type": "string", "enum": ["high", "mid", "low", "none"] },
+      "source":             { "type": "string", "enum": ["linkedin", "exhibition", "cold-call", "referral", "other"] },
+      "capturedAt":         { "type": "string", "format": "date-time" }
+    }
+  },
+  "rules": [
+    {
+      "ruleId": "dedupe_v1",
+      "level": "hard",
+      "condition": {
+        "operator": "NOT_IN",
+        "field": "contactPhoneHash OR companyUnifiedCode OR normalizedCompanyName",
+        "source": "platform.crm_lead_index"
+      },
+      "onFail": "reject"
+    },
+    {
+      "ruleId": "format_phone_v1",
+      "level": "hard",
+      "condition": { "operator": "REGEX", "field": "contactPhone", "pattern": "^1[3-9]\\d{9}$|^0\\d{9,11}$" },
+      "onFail": "reject"
+    },
+    {
+      "ruleId": "format_email_v1",
+      "level": "hard",
+      "condition": { "operator": "REGEX", "field": "contactEmail", "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$" },
+      "onFail": "reject"
+    },
+    {
+      "ruleId": "persona_v1",
+      "level": "hard",
+      "condition": { "operator": "IN", "field": "industry", "whitelist": "task.targetPersona.industry", "conjunction": "AND", "others": ["scale IN task.targetPersona.scale", "region MATCH task.coverage"] },
+      "onFail": "reject"
+    },
+    {
+      "ruleId": "timeliness_v1",
+      "level": "hard",
+      "condition": { "operator": "WITHIN", "field": "capturedAt", "windowHours": "task.windowHours" },
+      "onFail": "reject"
+    },
+    {
+      "ruleId": "intent_v1",
+      "level": "soft",
+      "condition": { "operator": "NE", "field": "intentLevel", "value": "none" },
+      "onFail": "reject"
+    }
+  ],
+  "decision": {
+    "validWhen": "all rules where level=hard pass AND intent_v1 (soft) passes",
+    "qualityScore": {
+      "weights": { "intentLevel": 0.5, "completeness": 0.3, "sourceTrust": 0.2 },
+      "output": "0..1，写入 verification_runs.quality_score，用于信誉与抽样复核"
+    }
+  }
+}

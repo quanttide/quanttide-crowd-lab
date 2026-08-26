@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "线索获取 · 验收配方 (VerifierRecipe)",
+  "description": "量潮销售众包「线索获取」任务类型的可机器判定验收配方。发布时写死并公开，验收按此执行。",
+  "type": "object",
+  "required": ["typeKey", "version", "evidenceSchema", "rules", "decision"],
+  "properties": {
+    "typeKey": { "const": "lead_acquisition" },
+    "version": { "type": "string", "example": "1.0.0" },
+    "evidenceSchema": {
+      "type": "object",
+      "required": ["contactName", "contactPhone", "contactEmail", "companyName", "companyUnifiedCode", "industry", "scale", "region", "intentLevel", "source", "capturedAt"],
+      "properties": {
+        "contactName":        { "type": "string", "description": "联系人姓名" },
+        "contactPhone":       { "type": "string", "description": "手机/座机" },
+        "contactEmail":       { "type": "string", "format": "email" },
+        "companyName":        { "type": "string" },
+        "companyUnifiedCode": { "type": "string", "description": "统一社会信用代码，用于去重/画像" },
+        "industry":           { "type": "string" },
+        "scale":              { "type": "string", "enum": ["1-49人", "50-99人", "100-499人", "500+人"] },
+        "region":             { "type": "string" },
+        "intentLevel":        { "type": "string", "enum": ["high", "mid", "low", "none"] },
+        "source":             { "type": "string", "enum": ["linkedin", "exhibition", "cold-call", "referral", "other"] },
+        "capturedAt":         { "type": "string", "format": "date-time" }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "description": "按顺序执行。硬规则任一失败即判无效；软规则输出质量分用于信誉与抽样，不阻断结算。",
+      "items": {
+        "type": "object",
+        "required": ["ruleId", "level", "condition"],
+        "properties": {
+          "ruleId":  { "type": "string" },
+          "level":   { "type": "string", "enum": ["hard", "soft"] },
+          "condition": { "type": "object", "x-description": "机器可求值的布尔表达式（伪码/求值器），见 rule 说明" }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "properties": {
+        "validWhen": {
+          "type": "string",
+          "description": "valid = 规则1..4(hard) 全通过 AND intentLevel != 'none'",
+          "example": "(all hard pass) AND (intentLevel != none)"
+        },
+        "qualityScore": {
+          "type": "object",
+          "description": "加权(意向等级, 信息完整度, 来源可信度)。用于信誉与抽查，不阻断打款。",
+          "properties": {
+            "weights": { "type": "object", "example": { "intentLevel": 0.5, "completeness": 0.3, "sourceTrust": 0.2 } }
+          }
+        }
+      }
+    }
+  }
+}
